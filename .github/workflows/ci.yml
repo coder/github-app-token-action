@@ -13,8 +13,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  NODE_VERSION: 24.22.3
+  GO_VERSION: 1.27.4
   ACTIONLINT_VERSION: v1.7.12
-  ZIZMOR_VERSION: 1.32.0
 
 jobs:
   test:
@@ -25,16 +26,11 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-      - name: No dependencies
-        # The action runs src/ directly; anything it imports must be part of Node.
-        run: |
-          if grep -rhoE "from \"[^\"]+\"" src | grep -vE "from \"(node:[a-z/_]+|\./[a-z]+\.mjs)\""; then
-            echo "::error::src/ may only import node: built-ins and its own files"
-            exit 1
-          fi
+          node-version: ${{ env.NODE_VERSION }}
       - name: Test
-        run: node --test
+        # test/guard.mjs fails any import from src/ other than the allowed Node built-ins and src/
+        # itself; test/deps.test.mjs checks the same statically, plus action.yml's entry points.
+        run: node --import ./test/guard.mjs --test
 
   workflows:
     runs-on: ubuntu-latest
@@ -44,11 +40,17 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
-          go-version: stable
+          go-version: ${{ env.GO_VERSION }}
           cache: false
       - name: actionlint
         run: go run "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+      - name: Install zizmor
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --require-hashes --no-deps --only-binary :all: \
+            -r .github/zizmor-requirements.txt
       - name: zizmor
         env:
           GH_TOKEN: ${{ github.token }} # online audits (impostor commits, known-vulnerable actions)
-        run: pipx run "zizmor==${ZIZMOR_VERSION}" --format=github .github/
+        # The whole repository, so action.yml is audited too.
+        run: '"$RUNNER_TEMP/zizmor/bin/zizmor" --format=github .'

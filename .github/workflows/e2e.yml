@@ -59,3 +59,20 @@ jobs:
             gh api -X DELETE "repos/$REPO/git/refs/heads/e2e-should-fail" || true
             exit 1
           fi
+
+      - name: Revoking the token works
+        # The post step only warns when revocation fails and runs after every check, so this runs
+        # its code now and checks GitHub rejects the token afterwards. The post step's own DELETE
+        # then gets 401, which it accepts.
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+          API_URL: ${{ github.api_url }}
+        run: |
+          node --input-type=module -e '
+            import { post } from "./src/lib.mjs";
+            await post({ env: { STATE_token: process.env.TOKEN, STATE_api_url: process.env.API_URL } });
+          '
+          if GH_TOKEN="$TOKEN" gh api installation/repositories >/dev/null 2>&1; then
+            echo "::error::the token still works after it was revoked"
+            exit 1
+          fi

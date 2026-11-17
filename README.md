@@ -17,9 +17,9 @@ jobs:
       - id: app
         uses: coder/github-app-token-action@<commit sha> # vX.Y.Z
         with:
-          client-id: Iv23li...
-          kms-key: projects/coder-github-apps/locations/global/keyRings/github-apps/cryptoKeys/<app slug>
-          workload-identity-provider: projects/<number>/locations/global/workloadIdentityPools/github-app-keys/providers/github
+          client-id: <App client ID>
+          kms-key: projects/<project>/locations/<location>/keyRings/<key ring>/cryptoKeys/<key>
+          workload-identity-provider: projects/<project number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>
           repositories: coder
           permissions: |
             contents: write
@@ -67,8 +67,10 @@ secret that held the old one.
   everything that touches credentials is in this repository.
 - The OIDC token, the Google access token, the JWT and the installation token are masked.
 - Pin this action by commit SHA.
-- Who can sign with which App key is decided in Google Cloud (coder/gcp,
-  `projects/production/coder-github-apps`), not here.
+- Who can sign with which App key is decided in Google Cloud IAM, not here. Grant
+  `roles/cloudkms.signer` (and `roles/cloudkms.viewer` to resolve the newest version) on each key
+  to the workload identities that need it, as narrowly as possible: repository, environment, and
+  ideally workflow file and ref.
 
 ## Development
 
@@ -76,4 +78,5 @@ secret that held the old one.
 node --test
 ```
 
-The `e2e` workflow mints a real token with a test App on every push to `main`.
+The `e2e` workflow mints a real token with a test App on every push to `main` and checks that it
+only reaches this repository, can't write, and is revoked afterwards.

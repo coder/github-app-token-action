@@ -18,8 +18,8 @@ import {
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const SHA256_DIGEST_INFO = Buffer.from("3031300d060960864801650304020105000420", "hex");
 
-const KEY = "projects/coder-github-apps/locations/global/keyRings/github-apps/cryptoKeys/test-app";
-const PROVIDER = "projects/123456/locations/global/workloadIdentityPools/github-app-keys/providers/github";
+const KEY = "projects/example-project/locations/global/keyRings/example-ring/cryptoKeys/test-app";
+const PROVIDER = "projects/123456/locations/global/workloadIdentityPools/example-pool/providers/example";
 const NOW = Date.parse("2026-11-17T12:00:00Z");
 const EXPIRES = "2026-11-17T13:00:00Z";
 
@@ -47,7 +47,7 @@ function makeEnv(inputs = {}) {
   writeFileSync(env.GITHUB_OUTPUT, "");
   writeFileSync(env.GITHUB_STATE, "");
   const all = {
-    "client-id": "Iv23liTESTCLIENT",
+    "client-id": "IvTESTCLIENT",
     "kms-key": KEY,
     "workload-identity-provider": PROVIDER,
     owner: "coder",
@@ -110,18 +110,18 @@ function fakeServices(overrides = {}, { kmsToken = "federated" } = {}) {
         );
         assert.deepEqual(JSON.parse(Buffer.from(h, "base64url")), { alg: "RS256", typ: "JWT" });
         const claims = JSON.parse(Buffer.from(p, "base64url"));
-        assert.deepEqual(claims, { iat: NOW / 1000 - 60, exp: NOW / 1000 + 540, iss: "Iv23liTESTCLIENT" });
+        assert.deepEqual(claims, { iat: NOW / 1000 - 60, exp: NOW / 1000 + 540, iss: "IvTESTCLIENT" });
         return json(200, { id: 42, app_slug: "test-app" });
       }
       case "POST https://api.github.com/app/installations/42/access_tokens":
         assert.match(headers.Authorization, /^Bearer /);
         return json(201, {
-          token: "ghs_secret",
+          token: "fake-installation-token",
           expires_at: EXPIRES,
           permissions: { metadata: "read", ...body.permissions },
         });
       case "DELETE https://api.github.com/installation/token":
-        assert.equal(headers.Authorization, "token ghs_secret");
+        assert.equal(headers.Authorization, "token fake-installation-token");
         return new Response(null, { status: 204 });
     }
     if (method === "POST" && u.pathname.endsWith(":asymmetricSign")) {
@@ -210,13 +210,13 @@ describe("run", () => {
     });
 
     assert.deepEqual(readFileCommands(env.GITHUB_OUTPUT), {
-      token: "ghs_secret",
+      token: "fake-installation-token",
       "installation-id": "42",
       "app-slug": "test-app",
       "expires-at": EXPIRES,
     });
     assert.deepEqual(readFileCommands(env.GITHUB_STATE), {
-      token: "ghs_secret",
+      token: "fake-installation-token",
       expires_at: EXPIRES,
       api_url: "https://api.github.com",
     });
@@ -233,7 +233,7 @@ describe("run", () => {
   });
 
   it("impersonates a service account when one is given", async () => {
-    const sa = "app-signer@coder-github-apps.iam.gserviceaccount.com";
+    const sa = "app-signer@example-project.iam.gserviceaccount.com";
     const env = makeEnv({ "service-account": sa, "kms-key": `${KEY}/cryptoKeyVersions/2` });
     const svc = fakeServices(
       {
@@ -275,7 +275,7 @@ describe("run", () => {
   it("refuses a token with permissions that were not requested", async () => {
     const svc = fakeServices({
       "POST https://api.github.com/app/installations/42/access_tokens": () =>
-        json(201, { token: "ghs_secret", expires_at: EXPIRES, permissions: { contents: "write" } }),
+        json(201, { token: "fake-installation-token", expires_at: EXPIRES, permissions: { contents: "write" } }),
     });
     const env = makeEnv();
     await assert.rejects(
@@ -336,7 +336,7 @@ describe("request", () => {
 describe("post", () => {
   it("revokes the saved token", async () => {
     const svc = fakeServices();
-    const env = { STATE_token: "ghs_secret", STATE_expires_at: EXPIRES, STATE_api_url: "https://api.github.com" };
+    const env = { STATE_token: "fake-installation-token", STATE_expires_at: EXPIRES, STATE_api_url: "https://api.github.com" };
     await post({ env, fetchFn: svc.fetchFn, now: () => NOW, log: quiet, opts: noSleep });
     assert.equal(svc.calls.length, 1);
     assert.equal(svc.calls[0].method, "DELETE");
@@ -345,7 +345,7 @@ describe("post", () => {
     const svc = fakeServices();
     await post({ env: {}, fetchFn: svc.fetchFn, log: quiet });
     await post({
-      env: { STATE_token: "ghs_secret", STATE_expires_at: EXPIRES, STATE_api_url: "https://api.github.com" },
+      env: { STATE_token: "fake-installation-token", STATE_expires_at: EXPIRES, STATE_api_url: "https://api.github.com" },
       fetchFn: svc.fetchFn,
       now: () => Date.parse(EXPIRES) + 1,
       log: quiet,

@@ -1,8 +1,7 @@
 name: e2e
 
-# Mints a real token with the test App, whose key is in Cloud KMS
-# (coder/gcp: projects/production/coder-github-apps). The coder-github-apps pool only accepts
-# this repository from the e2e environment, which is limited to main.
+# Mints a real token with a test App whose key is in Cloud KMS. The Google Cloud side only lets
+# this workflow sign, from the e2e environment on main.
 on:
   push:
     branches: [main]

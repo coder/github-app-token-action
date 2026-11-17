@@ -1,0 +1,62 @@
+name: e2e
+
+# Mints a real token with the test App, whose key is in Cloud KMS
+# (coder/gcp: projects/production/coder-github-apps). The coder-github-apps pool only accepts
+# this repository from the e2e environment, which is limited to main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    environment: e2e
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: app
+        # The checkout above is this commit, so ./ is the code under test. actionlint does not
+        # accept the $/ self-repository form yet.
+        uses: ./ # zizmor: ignore[self-repository]
+        with:
+          client-id: ${{ vars.E2E_APP_CLIENT_ID }}
+          kms-key: ${{ vars.E2E_KMS_KEY }}
+          workload-identity-provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          repositories: ${{ github.event.repository.name }}
+          permissions: |
+            contents: read
+
+      - name: The token reaches only this repository
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          repos=$(gh api installation/repositories --jq '[.repositories[].full_name] | join(",")')
+          if [[ "$repos" != "$REPO" ]]; then
+            echo "::error::expected only $REPO, got: $repos"
+            exit 1
+          fi
+          gh api "repos/$REPO/contents/action.yml" --jq .name
+
+      - name: The token cannot write
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh api -X POST "repos/$REPO/git/refs" -f ref=refs/heads/e2e-should-fail -f sha="$GITHUB_SHA" 2>/dev/null; then
+            echo "::error::a contents: read token created a branch"
+            gh api -X DELETE "repos/$REPO/git/refs/heads/e2e-should-fail" || true
+            exit 1
+          fi

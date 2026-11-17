@@ -1,0 +1,66 @@
+name: GitHub App token (Cloud KMS)
+description: >-
+  Mint a GitHub App installation token whose JWT is signed by a Cloud KMS key, so the
+  App's private key never exists outside the HSM. Revokes the token when the job ends.
+author: Coder
+
+inputs:
+  client-id:
+    description: The App's client ID (preferred) or numeric App ID. Used as the JWT issuer.
+    required: true
+  kms-key:
+    description: >-
+      Cloud KMS key holding the App's private key:
+      projects/P/locations/L/keyRings/R/cryptoKeys/K, optionally followed by
+      /cryptoKeyVersions/N. Without a version, the highest-numbered ENABLED version is used,
+      which needs cloudkms.cryptoKeyVersions.list on the key.
+    required: true
+  workload-identity-provider:
+    description: >-
+      Full resource name of the Workload Identity Federation provider:
+      projects/NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER.
+    required: true
+  service-account:
+    description: >-
+      Optional service account email to impersonate. Leave empty to call KMS directly as the
+      federated identity.
+    required: false
+    default: ""
+  owner:
+    description: Organization or user the App is installed on.
+    required: false
+    default: ${{ github.repository_owner }}
+  repositories:
+    description: >-
+      Repository names (without the owner) the token may access, separated by commas or
+      newlines. Use "*" for every repository the installation can access.
+    required: true
+  permissions:
+    description: >-
+      Permissions for the token, one "name: level" per line or comma-separated, using the
+      names of the REST API (for example "contents: read", "pull_requests: write").
+      Must be a subset of what the App's installation has.
+    required: true
+  skip-token-revoke:
+    description: Do not revoke the token when the job ends.
+    required: false
+    default: "false"
+  github-api-url:
+    description: GitHub REST API base URL.
+    required: false
+    default: ${{ github.api_url }}
+
+outputs:
+  token:
+    description: The installation access token.
+  installation-id:
+    description: The installation ID.
+  app-slug:
+    description: The App's slug.
+  expires-at:
+    description: When the token expires (ISO 8601).
+
+runs:
+  using: node24
+  main: src/main.mjs
+  post: src/post.mjs

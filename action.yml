@@ -12,8 +12,8 @@ inputs:
     description: >-
       Cloud KMS key holding the App's private key:
       projects/P/locations/L/keyRings/R/cryptoKeys/K, optionally followed by
-      /cryptoKeyVersions/N. Without a version, the highest-numbered ENABLED version is used,
-      which needs cloudkms.cryptoKeyVersions.list on the key.
+      /cryptoKeyVersions/N. Without a version, the highest-numbered ENABLED RS256 version is
+      used, which needs cloudkms.cryptoKeyVersions.list on the key.
     required: true
   workload-identity-provider:
     description: >-
@@ -27,9 +27,17 @@ inputs:
     required: false
     default: ""
   owner:
-    description: Organization or user the App is installed on.
+    description: >-
+      Organization or user the App is installed on. Must be this repository's owner unless
+      allow-other-owner is true. Never pass this through from an untrusted caller.
     required: false
     default: ${{ github.repository_owner }}
+  allow-other-owner:
+    description: >-
+      Allow owner to differ from this repository's owner, to mint a token for another
+      installation of the App.
+    required: false
+    default: "false"
   repositories:
     description: >-
       Repository names (without the owner) the token may access, separated by commas or
@@ -42,13 +50,22 @@ inputs:
       Must be a subset of what the App's installation has.
     required: true
   skip-token-revoke:
-    description: Do not revoke the token when the job ends.
+    description: >-
+      Do not revoke the token when the job ends. The token stays valid until it expires (one
+      hour). It cannot be handed to another job: masked values are dropped from job outputs.
     required: false
     default: "false"
   github-api-url:
-    description: GitHub REST API base URL.
+    description: >-
+      GitHub REST API base URL. The App JWT, which can mint tokens for every installation of the
+      App, is sent here. Must equal this run's GITHUB_API_URL unless allow-custom-api-url is
+      true. Never pass this through from an untrusted caller.
     required: false
     default: ${{ github.api_url }}
+  allow-custom-api-url:
+    description: Allow github-api-url to differ from this run's GITHUB_API_URL.
+    required: false
+    default: "false"
 
 outputs:
   token:
